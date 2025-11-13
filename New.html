@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>لعبة بطاقات - الثورة التحريرية (Memory)</title>
+  <style>
+    :root{
+      --bg:#f7f8fb; --card:#ffffff; --accent:#2b6cb0; --ok:#2f855a; --bad:#c53030;
+    }
+    *{box-sizing:border-box;font-family: "Segoe UI", Tahoma, system-ui, "Noto Naskh Arabic", sans-serif}
+    body{margin:0;background:linear-gradient(180deg,#eef2f7, #f7fafc);color:#111;display:flex;min-height:100vh;align-items:flex-start;justify-content:center;padding:24px;}
+    .app{width:100%;max-width:980px;background:var(--bg);border-radius:12px;padding:20px;box-shadow:0 8px 30px rgba(20,20,40,0.08)}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{margin:0;font-size:20px}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
+    button.secondary{background:#e2e8f0;color:#0f172a}
+    .info{display:flex;gap:12px;align-items:center;font-size:14px}
+    .board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
+    .card{position:relative;perspective:1000px;height:120px}
+    .card-inner{position:absolute;inset:0;border-radius:10px;transform-style:preserve-3d;transition:transform .45s cubic-bezier(.2,.9,.3,1);cursor:pointer;box-shadow:0 6px 18px rgba(30,40,60,0.08)}
+    .card.flipped .card-inner{transform:rotateY(180deg)}
+    .face{position:absolute;inset:0;border-radius:10px;backface-visibility:hidden;display:flex;align-items:center;justify-content:center;padding:8px;text-align:center}
+    .front{background:linear-gradient(180deg,#ffffff,#f1f5f9);border:2px solid #e2e8f0}
+    .back{background:linear-gradient(180deg,#2b6cb0,#2c5282);color:#fff;transform:rotateY(180deg);font-weight:700}
+    .small{font-size:12px;color:#475569}
+    .summary{margin-top:14px;padding:12px;background:#fff;border-radius:10px;border:1px solid #e2e8f0}
+    .hidden{display:none}
+    .badge{display:inline-block;padding:6px 8px;border-radius:999px;background:#f1f5f9;font-weight:600;color:#0f172a;margin-left:6px}
+    footer{margin-top:12px;font-size:13px;color:#475569}
+    @media (max-width:700px){
+      .board{grid-template-columns:repeat(4,1fr)}
+      .card{height:110px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="لعبة بطاقات الثورة - وضع الذاكرة">
+    <header>
+      <h1>لعبة البطاقات — الثورة التحريرية <span class="small">(مطابقة - Memory)</span></h1>
+      <div class="controls">
+        <div class="info">
+          <div>الوقت: <strong id="timer">--:--</strong></div>
+          <div>نقاط: <strong id="score">0</strong></div>
+          <div>محاولات: <strong id="moves">0</strong></div>
+        </div>
+        <button id="restartBtn" title="إعادة تشغيل">إعادة تشغيل</button>
+        <button id="hintBtn" class="secondary" title="كشف مؤقت">تلميح</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="board" id="board" aria-live="polite"></section>
+
+      <section id="after" class="summary hidden" aria-live="polite">
+        <h3>نتيجة الجولة</h3>
+        <p id="resultText"></p>
+        <div id="badges"></div>
+        <hr/>
+        <div id="educational"></div>
+      </section>
+    </main>
+
+    <footer>
+      حفظ سريع: احفظ الملف وافتحه في المتصفح. التصميم للأطفال (8–12). يحتوي كل زوج بطاقتين مرتبطتين: عنوان الحدث ⇄ معلومة عنه.
+    </footer>
+  </div>
+
+<script>
+/*
+  نسخة جاهزة للنسخ والتشغيل محلياً.
+  تصميم مبسّط: 20 بطاقة (10 أزواج). كل زوج: same id => تطابق.
+  اللغة: العربية RTL.
+*/
+
+const cardsData = [
+  // حدث: اندلاع الثورة 1 نوفمبر 1954
+  {id:'1954', type:'title', text:'اندلاع الثورة - 1 نوفمبر 1954'},
+  {id:'1954', type:'detail', text:'ليلة 1 نوفمبر 1954: عمليات فدائية كان انطلاقها معيارياً لبداية الثورة.'},
+
+  // هجومات الشمال - القسنطيني 1955
+  {id:'q1955', type:'title', text:'هجومات الشمال - القسنطيني 1955'},
+  {id:'q1955', type:'detail', text:'عمليات عسكرية ومقاومة مكثفة في المنطقة الشمالية والقسنطيني سنة 1955.'},
+
+  // مؤتمر الصومام 1956
+  {id:'1956', type:'title', text:'مؤتمر الصومام - 20 أغسطس 1956'},
+  {id:'1956', type:'detail', text:'مؤتمر وضع قواعد تنظيمية للحركة وجمع قيادات الثورة لتعزيز القيادة.'},
+
+  // مظاهرات 11 ديسمبر 1960
+  {id:'1960', type:'title', text:'مظاهرات 11 ديسمبر 1960'},
+  {id:'1960', type:'detail', text:'مظاهرات شعبية كبرى طالبت بالاستقلال وأظهرت تصميم الجزائريين.'},
+
+  // معلومات/شخصيات/أماكن (مزايا لتوسيع الأزواج)
+  {id:'leader1', type:'title', text:'قادة وطنيون بارزون'},
+  {id:'leader1', type:'detail', text:'ظهرت أسماء قيادية بارزة خلال الثورة وكانت مؤثرة في التنظيم.'},
+
+  {id:'place1', type:'title', text:'الصومام - المكان الرمزي'},
+  {id:'place1', type:'detail', text:'الصومام كان موقعاً اجتماعياً لوضع استراتيجيات الحركة التحريرية.'},
+
+  {id:'cause1', type:'title', text:'أسباب اندلاع الثورة'},
+  {id:'cause1', type:'detail', text:'رفض الاستعمار، السّياسة القمعية، والحاجة لاسترداد السيادة.'},
+
+  {id:'result1', type:'title', text:'نتائج رئيسية للثورة'},
+  {id:'result1', type:'detail', text:'بذور الاستقلال، توحيد الصفّ الوطني، وزيادة الوعي الشعبي.'}
+];
+
+// Double-check we have 20 items: we created 10 pairs = 20
+// Shuffle and render cards.
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+const boardEl = document.getElementById('board');
+const timerEl = document.getElementById('timer');
+const scoreEl = document.getElementById('score');
+const movesEl = document.getElementById('moves');
+const afterEl = document.getElementById('after');
+const resultText = document.getElementById('resultText');
+const badgesEl = document.getElementById('badges');
+const educationalEl = document.getElementById('educational');
+
+let deck = [];
+let firstCard = null, secondCard = null;
+let lock = false;
+let matches = 0;
+let moves = 0;
+let score = 0;
+let startTime = null;
+let timerInterval = null;
+let hintsLeft = 2;
+
+function initGame(){
+  deck = shuffle([...cardsData]);
+  boardEl.innerHTML = '';
+  firstCard = secondCard = null;
+  lock = false;
+  matches = 0;
+  moves = 0;
+  score = 0;
+  hintsLeft = 2;
+  startTime = Date.now();
+  clearInterval(timerInterval);
+  timerInterval = setInterval(updateTimer, 500);
+  updateUI();
+
+  deck.forEach((c, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.setAttribute('data-id', c.id);
+    card.setAttribute('data-idx', idx);
+    card.innerHTML = `
+      <div class="card-inner" role="button" tabindex="0">
+        <div class="face front small">${escapeHtml(c.text)}</div>
+        <div class="face back">بطاقة</div>
+      </div>
+    `;
+    card.addEventListener('click', () => onCardClick(card));
+    card.addEventListener('keydown', (e) => { if(e.key==='Enter') onCardClick(card); });
+    boardEl.appendChild(card);
+  });
+
+  afterEl.classList.add('hidden');
+}
+
+function onCardClick(cardEl){
+  if(lock) return;
+  if(cardEl.classList.contains('flipped')) return;
+
+  cardEl.classList.add('flipped');
+  if(!firstCard){
+    firstCard = cardEl;
+    return;
+  }
+  secondCard = cardEl;
+  lock = true;
+  moves++;
+  updateUI();
+
+  const id1 = firstCard.getAttribute('data-id');
+  const id2 = secondCard.getAttribute('data-id');
+
+  if(id1 === id2){
+    // match
+    matches++;
+    score += 100;
+    // leave flipped and disable further clicks
+    firstCard.querySelector('.card-inner').style.cursor = 'default';
+    secondCard.querySelector('.card-inner').style.cursor = 'default';
+    setTimeout(()=> {
+      firstCard.classList.add('matched');
+      secondCard.classList.add('matched');
+      resetSelection();
+      if(matches === cardsData.length/2) endGame();
+    }, 600);
+  } else {
+    // not match
+    score = Math.max(0, score-10);
+    setTimeout(()=> {
+      firstCard.classList.remove('flipped');
+      secondCard.classList.remove('flipped');
+      resetSelection();
+    }, 800);
+  }
+}
+
+function resetSelection(){
+  firstCard = secondCard = null;
+  lock = false;
+  updateUI();
+}
+
+function updateUI(){
+  movesEl.textContent = moves;
+  scoreEl.textContent = score;
+  document.getElementById('hintBtn').textContent = `تلميح (${hintsLeft})`;
+}
+
+function updateTimer(){
+  const elapsed = Math.floor((Date.now()-startTime)/1000);
+  const mm = String(Math.floor(elapsed/60)).padStart(2,'0');
+  const ss = String(elapsed%60).padStart(2,'0');
+  timerEl.textContent = `${mm}:${ss}`;
+}
+
+function endGame(){
+  clearInterval(timerInterval);
+  // compute final time
+  const elapsed = Math.floor((Date.now()-startTime)/1000);
+  const mm = String(Math.floor(elapsed/60)).padStart(2,'0');
+  const ss = String(elapsed%60).padStart(2,'0');
+
+  resultText.textContent = `أنهيت اللعبة في ${mm}:${ss} مع ${moves} محاولة ونقاط ${score}.`;
+  badgesEl.innerHTML = '';
+  if(score >= 800) badgesEl.innerHTML = '<span class="badge">خبير الثورة</span>';
+  else if(score >= 500) badgesEl.innerHTML = '<span class="badge">ممتاز</span>';
+  else badgesEl.innerHTML = '<span class="badge">جيد</span>';
+
+  // educational summary: show matched pairs info (titles + details) pulled from original deck order
+  educationalEl.innerHTML = '<h4>موجز تعليمي عن البطاقات:</h4>';
+  // We want to show one-line explanations for each pair (use cardsData as source)
+  const shown = {};
+  for(const c of cardsData){
+    if(!shown[c.id]){
+      shown[c.id] = [];
+    }
+    shown[c.id].push(c.text);
+  }
+  const ul = document.createElement('div');
+  for(const k in shown){
+    const pair = shown[k];
+    const div = document.createElement('div');
+    div.style.marginBottom = '6px';
+    div.innerHTML = `<strong>${escapeHtml(pair[0])}</strong> — ${escapeHtml(pair[1])}`;
+    ul.appendChild(div);
+  }
+  educationalEl.appendChild(ul);
+
+  afterEl.classList.remove('hidden');
+}
+
+document.getElementById('restartBtn').addEventListener('click', ()=>{
+  initGame();
+});
+
+document.getElementById('hintBtn').addEventListener('click', ()=>{
+  if(hintsLeft <= 0) return alert('لا توجد تلميحات متبقية.');
+  hintsLeft--;
+  updateUI();
+  // reveal two unmatched cards briefly
+  const unmatched = Array.from(document.querySelectorAll('.card:not(.matched):not(.flipped)'));
+  if(unmatched.length < 2) return;
+  // pick two that are a matching pair if possible
+  let pickA = unmatched[Math.floor(Math.random()*unmatched.length)];
+  // try to find its pair
+  const id = pickA.getAttribute('data-id');
+  const pair = unmatched.find(c => c.getAttribute('data-id') === id && c !== pickA);
+  let pickB = pair || unmatched.find(c => c !== pickA);
+  pickA.classList.add('flipped');
+  pickB.classList.add('flipped');
+  setTimeout(()=> {
+    pickA.classList.remove('flipped');
+    pickB.classList.remove('flipped');
+  }, 1500);
+});
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]});
+}
+
+// Start game on load
+initGame();
+</script>
+</body>
+</html>
